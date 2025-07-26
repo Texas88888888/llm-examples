@@ -1,12 +1,15 @@
 import streamlit as st
-import anthropic
+
+try:
+    from google.generativeai import GenerativeModel, configure as gemini_configure
+except ImportError:
+    GenerativeModel = None
+    gemini_configure = None
 
 with st.sidebar:
-    anthropic_api_key = st.text_input("Anthropic API Key", key="file_qa_api_key", type="password")
-    "[View the source code](https://github.com/streamlit/llm-examples/blob/main/pages/1_File_Q%26A.py)"
-    "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
+    gemini_api_key ="AIzaSyBJUdcLlhcRnEW8qt3s6ha8kbSDT4YZH3o"
 
-st.title("📝 File Q&A with Anthropic")
+st.title("📝 File Q&A with Gemini")
 uploaded_file = st.file_uploader("Upload an article", type=("txt", "md"))
 question = st.text_input(
     "Ask something about the article",
@@ -14,20 +17,20 @@ question = st.text_input(
     disabled=not uploaded_file,
 )
 
-if uploaded_file and question and not anthropic_api_key:
-    st.info("Please add your Anthropic API key to continue.")
+if uploaded_file and question and not gemini_api_key:
+    st.info("Please add your Gemini API key to continue.")
 
-if uploaded_file and question and anthropic_api_key:
+if uploaded_file and question and gemini_api_key:
+    if GenerativeModel is None or gemini_configure is None:
+        st.error("google-generativeai package not installed. Install with 'pip install google-generativeai'.")
+        st.stop()
+    gemini_configure(api_key=gemini_api_key)
     article = uploaded_file.read().decode()
-    prompt = f"""{anthropic.HUMAN_PROMPT} Here's an article:\n\n<article>
-    {article}\n\n</article>\n\n{question}{anthropic.AI_PROMPT}"""
-
-    client = anthropic.Client(api_key=anthropic_api_key)
-    response = client.completions.create(
-        prompt=prompt,
-        stop_sequences=[anthropic.HUMAN_PROMPT],
-        model="claude-v1",  # "claude-2" for Claude 2 model
-        max_tokens_to_sample=100,
-    )
-    st.write("### Answer")
-    st.write(response.completion)
+    prompt = f"Here's an article:\n\n{article}\n\n{question}"
+    model = GenerativeModel("gemini-2.0-flash-001")
+    try:
+        response = model.generate_content(prompt)
+        st.write("### Answer")
+        st.write(response.text)
+    except Exception as e:
+        st.error(f"Error generating response: {e}")

@@ -1,48 +1,49 @@
 import streamlit as st
 
-from langchain.agents import initialize_agent, AgentType
-from langchain.callbacks import StreamlitCallbackHandler
-from langchain.chat_models import ChatOpenAI
-from langchain.tools import DuckDuckGoSearchRun
+try:
+    from google.generativeai import GenerativeModel, configure as gemini_configure
+except ImportError:
+    GenerativeModel = None
+    gemini_configure = None
 
 with st.sidebar:
-    openai_api_key = st.text_input(
-        "OpenAI API Key", key="langchain_search_api_key_openai", type="password"
-    )
-    "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
-    "[View the source code](https://github.com/streamlit/llm-examples/blob/main/pages/2_Chat_with_search.py)"
-    "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
+    gemini_api_key="AIzaSyBJUdcLlhcRnEW8qt3s6ha8kbSDT4YZH3o"
 
-st.title("🔎 LangChain - Chat with search")
+st.title("🔎 Gemini - Chat")
 
 """
-In this example, we're using `StreamlitCallbackHandler` to display the thoughts and actions of an agent in an interactive Streamlit app.
-Try more LangChain 🤝 Streamlit Agent examples at [github.com/langchain-ai/streamlit-agent](https://github.com/langchain-ai/streamlit-agent).
+This example uses Gemini to answer your questions. Web search is not available in this demo.
 """
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Hi, I'm a chatbot who can search the web. How can I help you?"}
+        {"role": "assistant", "content": "Hi, I'm a Gemini chatbot. How can I help you?"}
     ]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-if prompt := st.chat_input(placeholder="Who won the Women's U.S. Open in 2018?"):
+if prompt := st.chat_input(placeholder="Ask me anything!"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
-    if not openai_api_key:
-        st.info("Please add your OpenAI API key to continue.")
+    if not gemini_api_key:
+        st.info("Please add your Gemini API key to continue.")
         st.stop()
 
-    llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, streaming=True)
-    search = DuckDuckGoSearchRun(name="Search")
-    search_agent = initialize_agent(
-        [search], llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, handle_parsing_errors=True
-    )
-    with st.chat_message("assistant"):
-        st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
-        response = search_agent.run(st.session_state.messages, callbacks=[st_cb])
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        st.write(response)
+    if GenerativeModel is None or gemini_configure is None:
+        st.error("google-generativeai package not installed. Install with 'pip install google-generativeai'.")
+        st.stop()
+
+    gemini_configure(api_key=gemini_api_key)
+    history = "\n".join([
+        ("User: " if m["role"] == "user" else "Assistant: ") + m["content"]
+        for m in st.session_state["messages"]
+    ])
+    model = GenerativeModel("gemini-2.0-flash-001")
+    try:
+        response = model.generate_content(history + f"\nUser: {prompt}\nAssistant:")
+        st.session_state.messages.append({"role": "assistant", "content": response.text})
+        st.chat_message("assistant").write(response.text)
+    except Exception as e:
+        st.error(f"Gemini model error: {e}")

@@ -3,17 +3,20 @@ import streamlit as st
 from streamlit_feedback import streamlit_feedback
 import trubrics
 
+try:
+    from google.generativeai import GenerativeModel, configure as gemini_configure
+except ImportError:
+    GenerativeModel = None
+    gemini_configure = None
+
 with st.sidebar:
-    openai_api_key = st.text_input("OpenAI API Key", key="feedback_api_key", type="password")
-    "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
-    "[View the source code](https://github.com/streamlit/llm-examples/blob/main/pages/5_Chat_with_user_feedback.py)"
-    "[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/streamlit/llm-examples?quickstart=1)"
+    gemini_api_key = "AIzaSyBJUdcLlhcRnEW8qt3s6ha8kbSDT4YZH3o"
 
 st.title("📝 Chat with feedback (Trubrics)")
 
 """
 In this example, we're using [streamlit-feedback](https://github.com/trubrics/streamlit-feedback) and Trubrics to collect and store feedback
-from the user about the LLM responses.
+from the user about the Gemini responses.
 """
 
 if "messages" not in st.session_state:
@@ -31,15 +34,27 @@ if prompt := st.chat_input(placeholder="Tell me a joke about sharks"):
     messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
-    if not openai_api_key:
-        st.info("Please add your OpenAI API key to continue.")
+    if not gemini_api_key:
+        st.info("Please add your Gemini API key to continue.")
         st.stop()
-    client = OpenAI(api_key=openai_api_key)
-    response = client.chat.completions.create(model="gpt-3.5-turbo", messages=messages)
-    st.session_state["response"] = response.choices[0].message.content
-    with st.chat_message("assistant"):
-        messages.append({"role": "assistant", "content": st.session_state["response"]})
-        st.write(st.session_state["response"])
+    if GenerativeModel is None or gemini_configure is None:
+        st.error("google-generativeai package not installed. Install with 'pip install google-generativeai'.")
+        st.stop()
+    gemini_configure(api_key=gemini_api_key)
+    history = "\n".join([
+        ("User: " if m["role"] == "user" else "Assistant: ") + m["content"]
+        for m in messages
+    ])
+    model = GenerativeModel("gemini-2.0-flash-001")
+    try:
+        response = model.generate_content(history + f"\nUser: {prompt}\nAssistant:")
+        st.session_state["response"] = response.text
+        with st.chat_message("assistant"):
+            messages.append({"role": "assistant", "content": st.session_state["response"]})
+            st.write(st.session_state["response"])
+    except Exception as e:
+        st.error(f"Gemini error: {e}")
+        st.stop()
 
 if st.session_state["response"]:
     feedback = streamlit_feedback(
@@ -57,7 +72,7 @@ if st.session_state["response"]:
         )
         collection = trubrics.collect(
             component_name="default",
-            model="gpt",
+            model="gemini",
             response=feedback,
             metadata={"chat": messages},
         )
